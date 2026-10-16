@@ -1,0 +1,14 @@
+manifest:
+  remotes:
+    - name: zephyrproject
+      url-base: https://github.com/zephyrproject-rtos
+  projects:
+    - name: zephyr
+      remote: zephyrproject
+      revision: v4.4.2
+      import:
+        name-allowlist:
+          - hal_rpi_pico
+          - cmsis_6
+  self:
+    path: snowboard-fc

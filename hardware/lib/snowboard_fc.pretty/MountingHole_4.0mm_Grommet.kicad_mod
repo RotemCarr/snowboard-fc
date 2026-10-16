@@ -1,0 +1,17 @@
+(footprint "MountingHole_4.0mm_Grommet" (version 20221018) (generator pcbnew)
+  (layer "F.Cu")
+  (attr board_only exclude_from_pos_files exclude_from_bom)
+  (fp_text reference "H**" (at 0 0) (layer "F.SilkS") hide
+      (effects (font (size 1.27 1.27) (thickness 0.15)))
+    (tstamp 667cfd25-23fe-4cc0-a8c9-9e6759947b36)
+  )
+  (fp_text value "M3 grommet 4.0mm" (at 0 0) (layer "F.SilkS") hide
+      (effects (font (size 1.27 1.27) (thickness 0.15)))
+    (tstamp 1fab02b5-9816-423d-89cd-e656bf9acc02)
+  )
+  (fp_circle (center 0 0) (end 3.1 0)
+    (stroke (width 0.12) (type default)) (fill none) (layer "F.SilkS") (tstamp 1cfadec8-a133-4ba7-a07c-a2b1fee27320))
+  (fp_circle (center 0 0) (end 3.3 0)
+    (stroke (width 0.05) (type default)) (fill none) (layer "F.CrtYd") (tstamp 2c4a1f80-f41c-43fc-af25-530e863713cf))
+  (pad "" np_thru_hole circle (at 0 0) (size 4 4) (drill 4) (layers "*.Cu") (tstamp e65de975-575f-4796-805d-c6906d114abd))
+)

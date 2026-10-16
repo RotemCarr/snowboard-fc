@@ -1,0 +1,38 @@
+# --- Zephyr / west builds ----------------------------------------------
+# Build directories (the workspace root build/ is outside this repo, but
+# per-app or ad-hoc builds may land inside it)
+build/
+build-*/
+twister-out*/
+sysbuild-*/
+
+# --- Firmware tooling ---------------------------------------------------
+# clangd index, and compile_commands.json symlinked from a build dir
+.cache/
+compile_commands.json
+*.pyc
+__pycache__/
+.venv/
+venv/
+
+# --- KiCad (hardware/) --------------------------------------------------
+hardware/**/*-backups/
+hardware/**/*.kicad_prl
+hardware/**/fp-info-cache
+hardware/**/*.lck
+hardware/**/_autosave-*
+hardware/**/*.kicad_sch-bak
+hardware/**/*.kicad_pcb-bak
+hardware/**/\#auto_saved_files\#
+# Fab outputs ARE committed per revision under hardware/fab/revN/.
+# Ad-hoc plots from KiCad's plot dialog are not:
+hardware/plots/
+
+# --- Editors and OS -----------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*~
+.DS_Store

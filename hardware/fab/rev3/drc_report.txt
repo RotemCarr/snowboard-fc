@@ -1,0 +1,10 @@
+** Drc report for snowboard_fc.kicad_pcb **
+** Created on 2026-10-13 15:23:45 **
+
+** Found 0 DRC violations **
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** End of Report **
