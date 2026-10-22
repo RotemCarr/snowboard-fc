@@ -58,7 +58,7 @@ snowboard-workspace/
 From the workspace root:
 
 ```sh
-west build -b snowboard/rp2350a/m33 snowboard-fc/app
+west build -b snowboard/rp2350a/m33 snowboard-fc/apps/fc
 ```
 
 ### Flash
