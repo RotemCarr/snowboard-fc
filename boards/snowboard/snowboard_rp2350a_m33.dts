@@ -1,0 +1,13 @@
+/*
+ * Snowboard flight controller, Cortex-M33 cores.
+ *
+ */
+
+/dts-v1/;
+
+#include <raspberrypi/rpi_pico/rp2350a.dtsi>
+#include <raspberrypi/rpi_pico/m33.dtsi>
+
+#include "snowboard.dtsi"
+
+#include <../boards/common/usb/cdc_acm_serial.dtsi>
