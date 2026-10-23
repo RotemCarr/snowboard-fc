@@ -1,0 +1,5 @@
+board:
+  name: snowboard
+  full_name: Snowboard RP2350A flight controller
+  socs:
+    - name: rp2350a

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+
+if BOARD_SNOWBOARD
+
+source "boards/common/usb/Kconfig.cdc_acm_serial.defconfig"
+
+config USB_SELF_POWERED
+	default n
+
+endif # BOARD_SNOWBOARD
