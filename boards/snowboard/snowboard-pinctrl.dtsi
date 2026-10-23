@@ -1,0 +1,83 @@
+/*
+ * Snowboard Rev 3 pin assignments.
+ * Source: hardware/docs/pinmap.md (generated from the schematic),
+ * SNB-HW-001 section 7.
+ *
+ * Plain GPIOs have no group here; they are set by *-gpios properties
+ * in snowboard.dtsi: GPIO5 IMU CS, GPIO6 IMU INT1, GPIO17 status LED,
+ * GPIO18 buzzer.
+ * Not yet assigned: GPIO22 ESC telemetry (needs an RX-only PIO UART).
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <zephyr/dt-bindings/pinctrl/rpi-pico-rp2350a-pinctrl.h>
+
+&pinctrl {
+	/* CRSF receiver, J3 */
+	uart0_default: uart0_default {
+		group1 {
+			pinmux = <UART0_TX_P0>;
+		};
+
+		group2 {
+			pinmux = <UART0_RX_P1>;
+			input-enable;
+		};
+	};
+
+	/* IMU. CS is GPIO5 via cs-gpios, not the SPI block's CSn. */
+	spi0_default: spi0_default {
+		group1 {
+			pinmux = <SPI0_SCK_P2>, <SPI0_TX_P3>;
+		};
+
+		group2 {
+			pinmux = <SPI0_RX_P4>;
+			input-enable;
+		};
+	};
+
+	/* Aux I2C pads (JP2). External 4.7 kOhm pull-ups on the board. */
+	i2c1_default: i2c1_default {
+		group1 {
+			pinmux = <I2C1_SDA_P14>, <I2C1_SCL_P15>;
+			input-enable;
+			input-schmitt-enable;
+		};
+	};
+
+	/* VBAT_SENSE, CUR_SENSE, RSSI. */
+	adc_default: adc_default {
+		group1 {
+			pinmux = <ADC_CH0_P26>, <ADC_CH1_P27>, <ADC_CH2_P28>;
+		};
+	};
+
+	/* DShot M1-M4, consecutive pins on one PIO block */
+	pio0_default: pio0_default {
+		group1 {
+			pinmux = <PIO0_P8>, <PIO0_P9>, <PIO0_P10>, <PIO0_P11>;
+		};
+	};
+
+	/* WS2812 data to the 5 V level shifter */
+	pio1_default: pio1_default {
+		group1 {
+			pinmux = <PIO1_P16>;
+		};
+	};
+
+	/* Aux UART pads (JP1); GPIO12/13 have no free hardware UART */
+	pio2_uart_aux_default: pio2_uart_aux_default {
+		tx_pins {
+			pinmux = <PIO2_P12>;
+		};
+
+		rx_pins {
+			pinmux = <PIO2_P13>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+};

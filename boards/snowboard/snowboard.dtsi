@@ -1,0 +1,200 @@
+/*
+ * Snowboard Rev 3 board-level devicetree.
+ * Source: hardware/docs/pinmap.md, SNB-HW-001.
+ *
+ * TODO: flash partitions and retained RAM (RFC 0002 sections 8 and 9.4).
+ * TODO: DShot on &pio0 once the custom binding exists.
+ * TODO: CRSF receiver node on &uart0 once the driver exists.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <freq.h>
+
+#include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/led/led.h>
+#include <zephyr/dt-bindings/sensor/icm42688.h>
+
+#include "snowboard-pinctrl.dtsi"
+
+/ {
+	model = "Snowboard flight controller";
+	compatible = "snowboard,snowboard-fc";
+
+	chosen {
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,flash-controller = &qmi;
+	};
+
+	aliases {
+		led0 = &status_led;
+		led-strip = &rgb_led;
+		buzzer = &buzzer;
+		watchdog0 = &wdt0;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		/* D2, blue, through 1 kOhm */
+		status_led: status_led {
+			gpios = <&gpio0 17 GPIO_ACTIVE_HIGH>;
+			label = "Status LED";
+		};
+	};
+
+	buzzer {
+		compatible = "gpio-leds";
+
+		/* Low-side driver Q1; BZ+ on 5 V */
+		buzzer: buzzer {
+			gpios = <&gpio0 18 GPIO_ACTIVE_HIGH>;
+			label = "Buzzer";
+		};
+	};
+
+	/* VBAT = J1 pin 2 through R21 100k / R22 10k (divide by 11) */
+	vbat: vbat {
+		compatible = "voltage-divider";
+		io-channels = <&adc 0>;
+		output-ohms = <10000>;
+		full-ohms = <110000>;
+	};
+};
+
+/* W25Q32JVSNIQ, 4 MB. */
+&flash0 {
+	reg = <0x10000000 DT_SIZE_M(4)>;
+};
+
+/* CRSF receiver on J3 */
+&uart0 {
+	current-speed = <420000>;
+	status = "okay";
+	pinctrl-0 = <&uart0_default>;
+	pinctrl-names = "default";
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&spi0 {
+	pinctrl-0 = <&spi0_default>;
+	pinctrl-names = "default";
+	clock-frequency = <DT_FREQ_M(24)>;
+	cs-gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	imu: icm42688@0 {
+		compatible = "invensense,icm42688", "invensense,icm4268x";
+		reg = <0>;
+		spi-max-frequency = <DT_FREQ_M(24)>;
+		/* INT1: push-pull, no pull-up on the board; driver default is active high */
+		int-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
+		gyro-pwr-mode = <ICM42688_DT_GYRO_LN>;
+		gyro-fs = <ICM42688_DT_GYRO_FS_2000>;
+		gyro-odr = <ICM42688_DT_GYRO_ODR_8000>;
+		accel-pwr-mode = <ICM42688_DT_ACCEL_LN>;
+		accel-fs = <ICM42688_DT_ACCEL_FS_16>;
+		accel-odr = <ICM42688_DT_ACCEL_ODR_8000>;
+	};
+};
+
+/* Aux I2C pads (JP2), nothing fitted */
+&i2c1 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	pinctrl-0 = <&i2c1_default>;
+	pinctrl-names = "default";
+	status = "disabled";
+};
+
+&adc {
+	pinctrl-0 = <&adc_default>;
+	pinctrl-names = "default";
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	/* VBAT_SENSE, GPIO26 */
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	/* CUR_SENSE, GPIO27; ESC output 40 mV/A */
+	channel@1 {
+		reg = <1>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+
+	/* RSSI pad, GPIO28 */
+	channel@2 {
+		reg = <2>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+/* PIO0: DShot M1-M4 (GPIO8-11). Enabled with the DShot node. */
+&pio0 {
+	status = "disabled";
+};
+
+/* PIO1: RGB LED D4 via the 74AHCT1G125 level shifter */
+&pio1 {
+	status = "okay";
+
+	pio-ws2812 {
+		compatible = "worldsemi,ws2812-rpi_pico-pio";
+		pinctrl-0 = <&pio1_default>;
+		pinctrl-names = "default";
+		bit-waveform = <3>, <3>, <4>;
+
+		rgb_led: ws2812 {
+			gpios = <&gpio0 16 GPIO_ACTIVE_HIGH>;
+			chain-length = <1>;
+			color-mapping = <LED_COLOR_ID_GREEN LED_COLOR_ID_RED LED_COLOR_ID_BLUE>;
+			reset-delay = <300>;
+			frequency = <800000>;
+		};
+	};
+};
+
+/* PIO2: aux UART on JP1 (GPIO12/13 have no free hardware UART) */
+&pio2 {
+	status = "okay";
+
+	aux_uart: uart-aux {
+		compatible = "raspberrypi,pico-uart-pio";
+		pinctrl-0 = <&pio2_uart_aux_default>;
+		pinctrl-names = "default";
+		current-speed = <115200>;
+	};
+};
+
+&timer0 {
+	status = "okay";
+};
+
+&wdt0 {
+	status = "okay";
+};
+
+&rng {
+	status = "okay";
+};
+
+zephyr_udc0: &usbd {
+	status = "okay";
+};
