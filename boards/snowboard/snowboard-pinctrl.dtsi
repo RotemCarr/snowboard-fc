@@ -8,6 +8,7 @@
  * GPIO18 buzzer.
  * Not yet assigned: GPIO22 ESC telemetry (needs an RX-only PIO UART).
  *
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <zephyr/dt-bindings/pinctrl/rpi-pico-rp2350a-pinctrl.h>

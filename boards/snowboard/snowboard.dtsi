@@ -6,6 +6,7 @@
  * TODO: DShot on &pio0 once the custom binding exists.
  * TODO: CRSF receiver node on &uart0 once the driver exists.
  *
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <freq.h>

@@ -1,6 +1,7 @@
 /*
  * Snowboard flight controller, Cortex-M33 cores.
  *
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 /dts-v1/;
