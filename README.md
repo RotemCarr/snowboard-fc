@@ -5,7 +5,7 @@ Snowboard is a custom RP2350A flight controller, built to replace the flight con
 | | |
 | --- | --- |
 | Hardware | Rev 3, ordered from JLCPCB (fabrication and full assembly) |
-| Firmware | Board definition stage 1 (Pico 2 pin mapping, see below) |
+| Firmware | Snowboard Rev 3 board definition (see below) |
 | Zephyr | v4.4.2 |
 | Hardware spec | [RFC 0001 / SNB-HW-001](docs/rfcs/0001-flight-controller-hardware.md) |
 | Firmware architecture | [RFC 0002](docs/rfcs/0002-firmware-architecture.md) |
@@ -71,7 +71,7 @@ west flash -r uf2
 
 With a Raspberry Pi Debug Probe on the SWD connector (J4), use `west flash -r probe-rs` or `west flash -r openocd`; `west debug` works the same way.
 
-> **Stage 1 board definition:** `boards/snowboard/` currently uses the Raspberry Pi Pico 2's pin assignments, so the firmware runs on a Pico 2 dev board. Do not flash it onto Snowboard hardware until stage 2 adds Snowboard's pin map: on Snowboard, the console UART would land on the receiver connector.
+The board definition in `boards/snowboard/` describes Snowboard Rev 3 itself, following `hardware/docs/pinmap.md`: the ICM-42688 IMU on SPI0, the CRSF receiver on UART0 (J3), the battery, current and RSSI ADC channels, the status LED, buzzer and RGB LED, and the aux UART (PIO2) and I2C pads. The console is on USB (CDC ACM). DShot, the CRSF receiver node and flash partitions are still TODO in `snowboard.dtsi`; they are added with their drivers.
 
 ## Hardware
 
