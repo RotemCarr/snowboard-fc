@@ -1,0 +1,9 @@
+tests:
+  lib.fc.arming:
+    tags:
+      - fc
+      - arming
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64

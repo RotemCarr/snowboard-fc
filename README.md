@@ -73,6 +73,41 @@ With a Raspberry Pi Debug Probe on the SWD connector (J4), use `west flash -r pr
 
 The board definition in `boards/snowboard/` describes Snowboard Rev 3 itself, following `hardware/docs/pinmap.md`: the ICM-42688 IMU on SPI0, the CRSF receiver on UART0 (J3), the battery, current and RSSI ADC channels, the status LED, buzzer and RGB LED, and the aux UART (PIO2) and I2C pads. The console is on USB (CDC ACM). DShot, the CRSF receiver node and flash partitions are still TODO in `snowboard.dtsi`; they are added with their drivers.
 
+## Testing
+
+Unit tests live in `tests/` and run on Zephyr's `native_sim` board, built with the host GCC, so no Zephyr SDK or hardware is needed. The `Dockerfile` provides the environment for this.
+
+### Build the image
+
+From the workspace root:
+
+```sh
+docker build -t snowboard-sim \
+  --build-arg ZEPHYR_REF=v4.4.2 \
+  --build-arg UID=$(id -u) --build-arg GID=$(id -g) \
+  snowboard-fc
+```
+
+`ZEPHYR_REF` selects which Zephyr revision's Python requirements are installed and should match the revision in `west.yml`. `UID` and `GID` make files written to the mounted workspace belong to you.
+
+### Run the tests
+
+Start a container from the workspace root, which is mounted at `/workspace`. The named `snowboard-ccache` volume keeps the compiler cache between runs:
+
+```sh
+docker run --rm -it \
+  -v "$PWD":/workspace \
+  -v snowboard-ccache:/home/dev/.ccache \
+  snowboard-sim
+```
+
+Inside the container, build a test suite and run the resulting executable:
+
+```sh
+west build -p always -b native_sim/native/64 -d build-sim snowboard-fc/tests/lib/fc/arming
+./build-sim/zephyr/zephyr.exe
+```
+
 ## Hardware
 
 Open `hardware/snowboard_fc.kicad_pro` in KiCad 7 or newer. `hardware/README.md` covers the board, its RP2350 core (copied from Raspberry Pi's Minimal design), ordering, and planned changes for the next revision.
