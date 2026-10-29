@@ -101,12 +101,21 @@ docker run --rm -it \
   snowboard-sim
 ```
 
-Inside the container, build a test suite and run the resulting executable:
+Inside the container, run every test suite with Twister:
 
 ```sh
-west build -p always -b native_sim/native/64 -d build-sim snowboard-fc/tests/lib/fc/arming
-./build-sim/zephyr/zephyr.exe
+west twister -T snowboard-fc/tests -p native_sim/native/64 --inline-logs
 ```
+
+Twister finds each suite by its `testcase.yaml`, builds it, runs it and reports the results. To run one scenario, select it by the name in its `testcase.yaml`:
+
+```sh
+west twister -T snowboard-fc/tests -p native_sim/native/64 -s lib.fc.arming
+```
+
+Results are written to `twister-out/` in the workspace root; earlier runs are kept as `twister-out.1`, `twister-out.2` and so on. `twister-out/twister.json` holds the full report, and each suite's build directory, including its `handler.log`, is under `twister-out/`.
+
+To browse the results, run `tools/twister-dashboard/serve.sh` on the host from the workspace root. It opens a local dashboard of every `twister-out*` run.
 
 ## Hardware
 

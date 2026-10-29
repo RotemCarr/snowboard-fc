@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zephyr Twister Dashboard</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  body { background:#0f172a; }
+  .scroll-thin::-webkit-scrollbar { width:8px; height:8px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background:#334155; border-radius:4px; }
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { color:#e2e8f0; }
+  :focus-visible { outline:2px solid #818cf8; outline-offset:2px; }
+</style>
+</head>
+<body class="text-slate-100 font-sans min-h-screen">
+
+<!-- Drag & drop overlay -->
+<div id="dropOverlay" class="hidden fixed inset-0 z-[100] bg-indigo-950/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+  <div class="border-2 border-dashed border-indigo-400 rounded-2xl px-12 py-10 text-center">
+    <p class="text-xl font-semibold text-white">Drop twister.json to load it</p>
+    <p class="text-sm text-indigo-200 mt-1">Drop several files to compare them as separate runs</p>
+  </div>
+</div>
+
+<!-- Header -->
+<header class="border-b border-slate-800 bg-slate-950/70 backdrop-blur sticky top-0 z-50">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <div class="bg-indigo-600 p-2 rounded-lg text-white shadow-md shadow-indigo-600/20">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+          Twister <span class="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-mono border border-indigo-500/30">Dashboard</span>
+        </h1>
+        <p id="subtitle" class="text-xs text-slate-400">No results loaded</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <select id="runSelect" aria-label="Run" class="hidden max-w-[16rem] bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none"></select>
+      <button id="csvBtn" disabled class="px-3 py-2 rounded-lg text-sm text-slate-300 border border-slate-700 hover:bg-slate-800 transition disabled:opacity-40 disabled:cursor-not-allowed">Export CSV</button>
+      <button id="openBtn" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium transition text-sm shadow-lg shadow-indigo-600/20">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Open twister.json
+      </button>
+      <input id="fileInput" type="file" accept=".json,application/json" multiple class="hidden">
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+  <div id="errorBox" class="hidden bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl px-4 py-3 text-sm"></div>
+
+  <!-- Empty state -->
+  <section id="emptyState" class="bg-slate-950 border border-dashed border-slate-700 rounded-2xl p-10 text-center space-y-4">
+    <h2 class="text-lg font-semibold text-white">Load a Twister report</h2>
+    <p class="text-sm text-slate-400 max-w-xl mx-auto">
+      Drop <span class="font-mono text-slate-300">twister.json</span> anywhere on this page, or use Open. Drop several to compare runs. Everything is parsed in your browser; nothing is uploaded.
+    </p>
+    <pre class="inline-block text-left text-xs font-mono bg-slate-900 border border-slate-800 rounded-lg px-4 py-3 text-slate-300">west twister -p snowboard/rp2350a/m33 -T tests/kernel
+# report: twister-out/twister.json</pre>
+    <p class="text-xs text-slate-500">Served by <span class="font-mono">serve.sh</span>, this page finds <span class="font-mono">twister-out</span> and every <span class="font-mono">twister-out.N</span> by itself. You can also pass <span class="font-mono">?src=path/to/twister.json</span> when serving over HTTP.</p>
+  </section>
+
+  <!-- View tabs -->
+  <nav id="viewTabs" class="hidden flex gap-2" aria-label="View">
+    <button data-view="run" class="px-4 py-1.5 rounded-lg text-sm font-medium transition">Single run</button>
+    <button data-view="meta" class="px-4 py-1.5 rounded-lg text-sm font-medium transition">Meta-analysis</button>
+  </nav>
+
+  <!-- ===== Single run view ===== -->
+  <div id="dashboard" class="hidden space-y-8">
+
+    <section>
+      <div class="flex items-baseline justify-between mb-3">
+        <p id="summaryLine" class="text-sm text-slate-400"></p>
+        <button id="clearFilters" class="hidden text-xs text-indigo-400 hover:text-indigo-300">Clear filters</button>
+      </div>
+      <div id="cards" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4"></div>
+    </section>
+
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 lg:col-span-1 flex flex-col items-center">
+        <h3 class="text-sm font-semibold text-slate-400 self-start mb-4">Pass rate</h3>
+        <div class="relative w-48 h-48">
+          <canvas id="ratioChart"></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span id="rateValue" class="text-3xl font-bold font-mono text-white">–</span>
+            <span class="text-[11px] text-slate-500">of executed</span>
+          </div>
+        </div>
+      </div>
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 lg:col-span-2">
+        <h3 class="text-sm font-semibold text-slate-400 mb-4">Results by status</h3>
+        <div class="h-48 w-full"><canvas id="distChart"></canvas></div>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div class="lg:col-span-4 space-y-6">
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
+          <h3 class="text-sm font-semibold text-slate-400">Targets</h3>
+          <div id="platforms" class="space-y-2 font-mono text-xs"></div>
+        </div>
+        <div id="envBox" class="hidden bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3">
+          <h3 class="text-sm font-semibold text-slate-400">Environment</h3>
+          <dl id="envList" class="text-xs space-y-1.5"></dl>
+        </div>
+      </div>
+
+      <div class="lg:col-span-8 space-y-6 min-w-0">
+        <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+          <div class="p-4 flex flex-wrap items-center gap-3 border-b border-slate-800">
+            <h3 class="text-sm font-semibold text-slate-400">Test suites <span id="tableCount" class="font-mono text-slate-500"></span></h3>
+            <input id="search" type="search" placeholder="Filter by name, target or reason" class="ml-auto w-full sm:w-72 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm placeholder-slate-500 focus:border-indigo-500 focus:outline-none">
+          </div>
+          <div class="max-h-[26rem] overflow-auto scroll-thin">
+            <table class="w-full text-left text-sm">
+              <thead class="sticky top-0 bg-slate-950 text-xs text-slate-500 border-b border-slate-800">
+                <tr>
+                  <th class="sortable px-3 py-2 font-medium" data-sort="status">Status</th>
+                  <th class="sortable px-3 py-2 font-medium" data-sort="name">Suite</th>
+                  <th class="sortable px-3 py-2 font-medium" data-sort="platform">Target</th>
+                  <th class="sortable px-3 py-2 font-medium text-right" data-sort="time">Time</th>
+                  <th class="sortable px-3 py-2 font-medium text-right" data-sort="cases">Cases</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+            <p id="noRows" class="hidden p-6 text-center text-sm text-slate-500">No suites match the current filters.</p>
+          </div>
+          <div id="moreWrap" class="hidden p-3 border-t border-slate-800 text-center">
+            <button id="moreBtn" class="text-sm text-indigo-400 hover:text-indigo-300"></button>
+          </div>
+        </div>
+
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-sm font-semibold text-slate-400">Suite details and log</h3>
+            <button id="copyLog" class="hidden text-xs text-slate-300 border border-slate-700 hover:bg-slate-800 rounded px-2 py-1">Copy log</button>
+          </div>
+          <div id="detail" class="space-y-3 text-sm">
+            <p class="text-slate-500">Select a suite in the table to see its reason, test cases and log.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===== Meta-analysis view ===== -->
+  <div id="meta" class="hidden space-y-8">
+    <p id="metaStatus" class="text-sm text-slate-400"></p>
+
+    <section class="bg-slate-950 border border-slate-800 rounded-xl p-6">
+      <h3 class="text-sm font-semibold text-slate-400 mb-4">Results across runs (oldest to newest)</h3>
+      <div class="h-72 w-full"><canvas id="trendChart"></canvas></div>
+    </section>
+
+    <section class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="p-4 border-b border-slate-800">
+        <h3 class="text-sm font-semibold text-slate-400">Runs</h3>
+        <p class="text-xs text-slate-500 mt-0.5">Click a run to open it. Pass rate counts passed against passed, failed and error.</p>
+      </div>
+      <div class="overflow-auto scroll-thin">
+        <table class="w-full text-left text-sm">
+          <thead class="text-xs text-slate-500 border-b border-slate-800">
+            <tr>
+              <th class="px-3 py-2 font-medium">Run</th>
+              <th class="px-3 py-2 font-medium">Date</th>
+              <th class="px-3 py-2 font-medium text-right">Tests</th>
+              <th class="px-3 py-2 font-medium text-right">Pass rate</th>
+              <th class="px-3 py-2 font-medium text-right">Fail + error</th>
+              <th class="px-3 py-2 font-medium text-right">Run time</th>
+              <th class="px-3 py-2 font-medium">Zephyr</th>
+            </tr>
+          </thead>
+          <tbody id="runRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <div class="mb-3">
+        <h3 id="changesTitle" class="text-sm font-semibold text-slate-400"></h3>
+        <p id="changesSummary" class="text-xs text-slate-500 mt-0.5"></p>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+          <h4 class="px-4 py-3 text-sm font-semibold text-rose-400 border-b border-slate-800">Newly failing <span id="newFailCount" class="font-mono text-slate-500"></span></h4>
+          <ul id="newFail" class="max-h-72 overflow-auto scroll-thin"></ul>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+          <h4 class="px-4 py-3 text-sm font-semibold text-emerald-400 border-b border-slate-800">Fixed <span id="fixedCount" class="font-mono text-slate-500"></span></h4>
+          <ul id="fixed" class="max-h-72 overflow-auto scroll-thin"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="p-4 flex flex-wrap items-center gap-3 border-b border-slate-800">
+        <h3 class="text-sm font-semibold text-slate-400">Test history</h3>
+        <select id="histFilter" aria-label="History filter" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none">
+          <option value="flaky">Flaky</option>
+          <option value="always">Always failing</option>
+          <option value="ever">Ever failed</option>
+        </select>
+        <span id="histCount" class="font-mono text-xs text-slate-500"></span>
+        <input id="histSearch" type="search" placeholder="Filter by test or target" class="ml-auto w-full sm:w-64 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm placeholder-slate-500 focus:border-indigo-500 focus:outline-none">
+      </div>
+      <p class="px-4 pt-3 text-xs text-slate-500">Flaky means passed in some runs and failed or errored in others. Flips counts pass/fail changes between consecutive runs.</p>
+      <div class="max-h-[28rem] overflow-auto scroll-thin">
+        <table class="w-full text-left text-sm">
+          <thead class="sticky top-0 bg-slate-950 text-xs text-slate-500 border-b border-slate-800">
+            <tr>
+              <th class="px-3 py-2 font-medium">Test</th>
+              <th class="px-3 py-2 font-medium">Target</th>
+              <th class="px-3 py-2 font-medium">History</th>
+              <th class="px-3 py-2 font-medium text-right">Failed</th>
+              <th class="px-3 py-2 font-medium text-right">Flips</th>
+            </tr>
+          </thead>
+          <tbody id="histRows"></tbody>
+        </table>
+        <p id="histNone" class="hidden p-6 text-center text-sm text-slate-500">Nothing matches.</p>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const stripAnsi = (s) => String(s || '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+  const fmtTime = (s) => {
+    if (!s) return '–';
+    if (s < 1) return Math.round(s * 1000) + ' ms';
+    if (s < 60) return s.toFixed(2) + ' s';
+    return Math.floor(s / 60) + 'm ' + Math.round(s % 60) + 's';
+  };
+  const fmtBytes = (n) => (n == null || isNaN(n)) ? '–' : (n >= 1024 ? (n / 1024).toFixed(1) + ' KiB' : n + ' B');
+  const fmtDate = (t) => t > 0 ? new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '–';
+  const isBad = (s) => s === 'failed' || s === 'error';
+
+  const ST = {
+    'passed':  { label: 'Pass',    hex: '#10b981', txt: 'text-emerald-400', bg: 'bg-emerald-500/10', bd: 'border-emerald-500/30', rank: 6 },
+    'failed':  { label: 'Fail',    hex: '#f43f5e', txt: 'text-rose-400',    bg: 'bg-rose-500/10',    bd: 'border-rose-500/30',    rank: 0 },
+    'error':   { label: 'Error',   hex: '#f59e0b', txt: 'text-amber-400',   bg: 'bg-amber-500/10',   bd: 'border-amber-500/30',   rank: 1 },
+    'skipped': { label: 'Skip',    hex: '#38bdf8', txt: 'text-sky-400',     bg: 'bg-sky-500/10',     bd: 'border-sky-500/30',     rank: 3 },
+    'blocked': { label: 'Block',   hex: '#c084fc', txt: 'text-purple-400',  bg: 'bg-purple-500/10',  bd: 'border-purple-500/30',  rank: 2 },
+    'filtered':{ label: 'Filter',  hex: '#94a3b8', txt: 'text-slate-400',   bg: 'bg-slate-500/10',   bd: 'border-slate-500/30',   rank: 4 },
+    'not run': { label: 'Not run', hex: '#64748b', txt: 'text-slate-500',   bg: 'bg-slate-500/10',   bd: 'border-slate-600/40',   rank: 5 }
+  };
+  const KEYS = Object.keys(ST);
+
+  function norm(s) {
+    s = String(s == null ? '' : s).toLowerCase().trim().replace(/_/g, ' ');
+    if (s === 'pass') return 'passed';
+    if (s === 'fail' || s === 'timeout') return 'failed';
+    if (ST[s]) return s;
+    return 'not run';
+  }
+  const badge = (k) => `<span class="inline-block text-[11px] font-mono px-2 py-0.5 rounded border ${ST[k].bg} ${ST[k].txt} ${ST[k].bd}">${ST[k].label}</span>`;
+
+  // ---------- state ----------
+  // A "run" is one twister.json: { name, t (ms), url|null, rows|undefined, env, error }
+  const state = {
+    runs: [], cur: 0, view: 'run',
+    rows: [], env: {},
+    status: null, platform: null, q: '',
+    sort: { key: 'status', dir: 1 },
+    limit: 200, selected: null
+  };
+  const PAGE = 200;
+
+  // ---------- parsing ----------
+  function deriveStatus(raw, tcs) {
+    if (raw != null && raw !== '') return norm(raw);
+    tcs = tcs.filter((t) => t.rawStatus != null && t.rawStatus !== '');
+    if (!tcs.length) return 'not run';
+    if (tcs.some((t) => t.status === 'failed')) return 'failed';
+    if (tcs.some((t) => t.status === 'error')) return 'error';
+    if (tcs.every((t) => t.status === 'passed')) return 'passed';
+    if (tcs.every((t) => t.status === 'skipped')) return 'skipped';
+    return 'not run';
+  }
+
+  function parseReport(data) {
+    const suites = Array.isArray(data) ? data : (data && data.testsuites);
+    if (!Array.isArray(suites)) throw new Error('No "testsuites" array found. Is this a twister.json report?');
+    return suites.map((s) => {
+      const tcs = (s.testcases || []).map((t) => ({
+        id: t.identifier || t.name || '',
+        status: norm(t.status),
+        rawStatus: t.status,
+        reason: t.reason || '',
+        time: Number(t.execution_time) || 0,
+        log: t.log || ''
+      }));
+      const status = deriveStatus(s.status, tcs);
+      tcs.forEach((t) => { if (t.rawStatus == null || t.rawStatus === '') t.status = status; });
+      const log = s.log || tcs.filter((t) => t.log).map((t) => '# ' + t.id + '\n' + t.log).join('\n\n');
+      return {
+        name: s.name || s.testsuite || '(unnamed)',
+        platform: s.platform || 'unknown',
+        arch: s.arch || '',
+        path: s.path || '',
+        status,
+        reason: s.reason || '',
+        time: Number(s.execution_time) || 0,
+        build: Number(s.build_time) || 0,
+        retries: s.retries || 0,
+        runnable: s.runnable,
+        ram: s.used_ram, rom: s.used_rom, availRam: s.available_ram, availRom: s.available_rom,
+        tcs, log,
+        units: tcs.length ? tcs : [{ id: '', status }]
+      };
+    });
+  }
+
+  function makeRun(data, name, fallbackT) {
+    const rows = parseReport(data);
+    rows.forEach((r, i) => { r.i = i; });
+    const env = (data && !Array.isArray(data) && data.environment) || {};
+    const rd = Date.parse(env.run_date);
+    return { name, t: isNaN(rd) ? (fallbackT || 0) : rd, env, rows, url: null, error: null };
+  }
+
+  const runLabel = (r) => r.name + (r.t ? ' (' + fmtDate(r.t) + ')' : '');
+
+  function showError(msg) { const b = $('errorBox'); b.textContent = msg; b.classList.remove('hidden'); }
+  function hideError() { $('errorBox').classList.add('hidden'); }
+
+  // ---------- run management ----------
+  async function loadRun(i) {
+    const run = state.runs[i];
+    if (run.rows) return run;
+    const res = await fetch(run.url, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Could not load ' + run.name + ' (HTTP ' + res.status + ')');
+    let data;
+    try { data = await res.json(); } catch (e) { throw new Error(run.name + ' is not valid JSON'); }
+    const loaded = makeRun(data, run.name, run.t);
+    run.rows = loaded.rows; run.env = loaded.env;
+    return run;
+  }
+
+  function fillRunSelect() {
+    const sel = $('runSelect');
+    sel.innerHTML = '';
+    state.runs.map((r, i) => [r, i]).reverse().forEach(([r, i]) => {
+      const o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = runLabel(r) + (i === state.runs.length - 1 && state.runs.length > 1 ? ' – latest' : '');
+      sel.appendChild(o);
+    });
+    sel.classList.toggle('hidden', state.runs.length < 2);
+  }
+
+  async function setRuns(runs) {
+    runs.sort((a, b) => a.t - b.t);
+    state.runs = runs;
+    hideError();
+    $('emptyState').classList.add('hidden');
+    $('csvBtn').disabled = false;
+    fillRunSelect();
+    $('viewTabs').classList.toggle('hidden', runs.length < 2);
+    await selectRun(runs.length - 1);
+  }
+
+  async function selectRun(i) {
+    const run = state.runs[i];
+    try { await loadRun(i); } catch (e) { showError(e.message); return; }
+    state.cur = i; state.rows = run.rows; state.env = run.env || {};
+    state.status = null; state.platform = null; state.q = ''; state.selected = null; state.limit = PAGE;
+    $('search').value = '';
+    $('runSelect').value = String(i);
+    hideError();
+    setView('run');
+    renderAll();
+  }
+
+  function setView(v) {
+    state.view = v;
+    $('dashboard').classList.toggle('hidden', v !== 'run');
+    $('meta').classList.toggle('hidden', v !== 'meta');
+    document.querySelectorAll('#viewTabs [data-view]').forEach((b) => {
+      const on = b.dataset.view === v;
+      b.className = 'px-4 py-1.5 rounded-lg text-sm font-medium transition ' + (on ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800');
+    });
+    if (v === 'meta') openMeta();
+  }
+
+  async function loadFiles(files) {
+    files = Array.from(files).filter(Boolean);
+    if (!files.length) return;
+    try {
+      const runs = [];
+      const seen = {};
+      for (const f of files) {
+        const txt = await f.text();
+        let data;
+        try { data = JSON.parse(txt); } catch (e) { throw new Error(f.name + ' is not valid JSON: ' + e.message); }
+        seen[f.name] = (seen[f.name] || 0) + 1;
+        const name = seen[f.name] > 1 ? f.name + ' #' + seen[f.name] : f.name;
+        runs.push(makeRun(data, name, f.lastModified));
+      }
+      await setRuns(runs);
+    } catch (e) { showError(e.message); }
+  }
+
+  // ---------- filtering / sorting (single run) ----------
+  function platformRows() {
+    return state.rows.filter((r) => !state.platform || r.platform === state.platform);
+  }
+  function visibleRows() {
+    const q = state.q.toLowerCase();
+    let rows = platformRows().filter((r) => !state.status || r.units.some((u) => u.status === state.status));
+    if (q) rows = rows.filter((r) => (r.name + ' ' + r.platform + ' ' + r.reason).toLowerCase().includes(q));
+    const { key, dir } = state.sort;
+    const val = {
+      status: (r) => ST[r.status].rank,
+      name: (r) => r.name.toLowerCase(),
+      platform: (r) => r.platform.toLowerCase(),
+      time: (r) => r.time,
+      cases: (r) => r.tcs.length
+    }[key];
+    return rows.slice().sort((a, b) => {
+      const x = val(a), y = val(b);
+      if (x < y) return -dir;
+      if (x > y) return dir;
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
+  }
+
+  // ---------- charts (single run) ----------
+  let ratioChart = null, distChart = null, trendChart = null;
+  function initCharts() {
+    if (typeof Chart === 'undefined') return;
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.borderColor = '#1e293b';
+    ratioChart = new Chart($('ratioChart'), {
+      type: 'doughnut',
+      data: { labels: ['Passed', 'Failed / error', 'Other'], datasets: [{ data: [0, 0, 0], backgroundColor: ['#10b981', '#f43f5e', '#334155'], borderWidth: 0 }] },
+      options: { cutout: '74%', maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+    distChart = new Chart($('distChart'), {
+      type: 'bar',
+      data: { labels: KEYS.map((k) => ST[k].label), datasets: [{ data: KEYS.map(() => 0), backgroundColor: KEYS.map((k) => ST[k].hex), borderRadius: 4 }] },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } }
+      }
+    });
+  }
+
+  // ---------- render: single run ----------
+  function counts(rows) {
+    const c = {}; KEYS.forEach((k) => (c[k] = 0));
+    rows.forEach((r) => r.units.forEach((u) => { c[u.status]++; }));
+    return c;
+  }
+
+  function renderCards() {
+    const rows = platformRows();
+    const c = counts(rows);
+    $('cards').innerHTML = KEYS.map((k) => {
+      const s = ST[k], active = state.status === k;
+      return `<button data-status="${k}" class="text-left bg-slate-950 border ${active ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-800/80 hover:border-slate-600'} rounded-xl p-4 flex flex-col justify-between shadow-sm transition">
+        <span class="text-xs font-semibold tracking-wide font-mono ${s.txt}">${s.label}</span>
+        <span class="mt-4 text-2xl font-bold font-mono ${c[k] ? 'text-white' : 'text-slate-600'}">${c[k]}</span>
+      </button>`;
+    }).join('');
+
+    const totalTime = rows.reduce((a, r) => a + r.time, 0);
+    const tests = rows.reduce((a, r) => a + r.units.length, 0);
+    $('summaryLine').textContent = `${tests} test${tests === 1 ? '' : 's'} in ${rows.length} suite${rows.length === 1 ? '' : 's'}, ${fmtTime(totalTime)} total run time` + (state.platform ? ` on ${state.platform}` : '');
+    $('clearFilters').classList.toggle('hidden', !(state.status || state.platform || state.q));
+
+    const bad = c.failed + c.error, executed = c.passed + bad;
+    $('rateValue').textContent = executed ? Math.round((c.passed / executed) * 100) + '%' : '–';
+    if (ratioChart) {
+      ratioChart.data.datasets[0].data = [c.passed, bad, tests - c.passed - bad];
+      ratioChart.update();
+    }
+    if (distChart) {
+      distChart.data.datasets[0].data = KEYS.map((k) => c[k]);
+      distChart.update();
+    }
+  }
+
+  function renderPlatforms() {
+    const map = new Map();
+    state.rows.forEach((r) => {
+      if (!map.has(r.platform)) map.set(r.platform, { total: 0, pass: 0, bad: 0 });
+      const m = map.get(r.platform);
+      r.units.forEach((u) => {
+        m.total++;
+        if (u.status === 'passed') m.pass++;
+        else if (isBad(u.status)) m.bad++;
+      });
+    });
+    const list = Array.from(map.entries()).sort((a, b) => b[1].bad - a[1].bad || a[0].localeCompare(b[0]));
+    $('platforms').innerHTML = list.map(([name, m]) => {
+      const active = state.platform === name;
+      const p = (m.pass / m.total) * 100, b = (m.bad / m.total) * 100;
+      return `<button data-platform="${esc(name)}" class="w-full text-left p-3 rounded-lg border ${active ? 'border-indigo-500/50 bg-indigo-500/10 text-indigo-200' : 'border-slate-800 bg-slate-900/50 hover:bg-slate-900 text-slate-300'} space-y-2">
+        <span class="flex justify-between items-center gap-2">
+          <span class="break-all">${esc(name)}</span>
+          <span class="text-[10px] text-slate-400 whitespace-nowrap">${m.total} tests${m.bad ? `, <span class="text-rose-400">${m.bad} failing</span>` : ''}</span>
+        </span>
+        <span class="flex h-1.5 rounded-full overflow-hidden bg-slate-800">
+          <span style="width:${p}%;background:#10b981"></span><span style="width:${b}%;background:#f43f5e"></span>
+        </span>
+      </button>`;
+    }).join('');
+  }
+
+  function renderEnv() {
+    const e = state.env || {};
+    const fields = [['Zephyr', e.zephyr_version], ['Toolchain', e.toolchain], ['Run date', e.run_date], ['Commit date', e.commit_date], ['OS', e.os], ['Python', e.python_version], ['Twister', e.twister_version || e.twister]];
+    const items = fields.filter((f) => f[1]);
+    $('envBox').classList.toggle('hidden', !items.length);
+    $('envList').innerHTML = items.map(([k, v]) => `<div class="flex justify-between gap-4"><dt class="text-slate-500">${k}</dt><dd class="font-mono text-slate-300 text-right break-all">${esc(v)}</dd></div>`).join('');
+  }
+
+  function renderTable() {
+    const rows = visibleRows();
+    const shown = rows.slice(0, state.limit);
+    $('tableCount').textContent = `(${rows.length})`;
+    $('noRows').classList.toggle('hidden', rows.length > 0);
+    $('rows').innerHTML = shown.map((r) => {
+      const passedCases = r.tcs.filter((t) => t.status === 'passed').length;
+      return `<tr data-i="${r.i}" class="cursor-pointer border-t border-slate-800/70 hover:bg-slate-900 ${state.selected === r.i ? 'bg-indigo-500/10' : ''}">
+        <td class="px-3 py-2 align-top">${badge(r.status)}</td>
+        <td class="px-3 py-2 align-top"><div class="font-mono text-xs text-slate-200 break-all">${esc(r.name)}</div>${r.reason ? `<div class="text-[11px] text-slate-500 max-w-md truncate">${esc(r.reason)}</div>` : ''}</td>
+        <td class="px-3 py-2 align-top font-mono text-[11px] text-slate-400 break-all">${esc(r.platform)}</td>
+        <td class="px-3 py-2 align-top text-right font-mono text-xs text-slate-400 whitespace-nowrap">${fmtTime(r.time)}</td>
+        <td class="px-3 py-2 align-top text-right font-mono text-xs text-slate-400 whitespace-nowrap">${r.tcs.length ? passedCases + '/' + r.tcs.length : '–'}</td>
+      </tr>`;
+    }).join('');
+    const more = rows.length - shown.length;
+    $('moreWrap').classList.toggle('hidden', more <= 0);
+    if (more > 0) $('moreBtn').textContent = `Show ${Math.min(PAGE, more)} more (${more} hidden)`;
+    document.querySelectorAll('th.sortable').forEach((th) => {
+      const base = th.textContent.replace(/[ ▲▼]+$/, '');
+      th.textContent = base + (state.sort.key === th.dataset.sort ? (state.sort.dir === 1 ? ' ▲' : ' ▼') : '');
+    });
+  }
+
+  function renderDetail() {
+    const r = state.rows[state.selected];
+    const copy = $('copyLog');
+    if (!r) {
+      copy.classList.add('hidden');
+      $('detail').innerHTML = '<p class="text-slate-500">Select a suite in the table to see its reason, test cases and log.</p>';
+      return;
+    }
+    const meta = [];
+    if (r.reason) meta.push(['Reason', r.reason]);
+    meta.push(['Target', r.platform + (r.arch ? ' (' + r.arch + ')' : '')]);
+    if (r.path) meta.push(['Path', r.path]);
+    meta.push(['Run time', fmtTime(r.time) + (r.build ? ', build ' + fmtTime(r.build) : '') + (r.retries ? ', ' + r.retries + ' retries' : '')]);
+    if (r.ram != null || r.rom != null) {
+      meta.push(['Footprint', `RAM ${fmtBytes(r.ram)}${r.availRam ? ' of ' + fmtBytes(r.availRam) : ''}, ROM ${fmtBytes(r.rom)}${r.availRom ? ' of ' + fmtBytes(r.availRom) : ''}`]);
+    }
+    const tcHtml = r.tcs.length ? `
+      <details ${r.status === 'passed' ? '' : 'open'} class="border border-slate-800 rounded-lg">
+        <summary class="cursor-pointer px-3 py-2 text-xs text-slate-400">${r.tcs.length} test case${r.tcs.length === 1 ? '' : 's'}</summary>
+        <div class="max-h-56 overflow-auto scroll-thin divide-y divide-slate-800/70">
+          ${r.tcs.map((t) => `<div class="px-3 py-1.5 flex items-start gap-3">
+            <span class="w-14 shrink-0">${badge(t.status)}</span>
+            <span class="min-w-0 flex-1"><span class="font-mono text-xs text-slate-300 break-all">${esc(t.id)}</span>${t.reason ? `<span class="block text-[11px] text-slate-500">${esc(t.reason)}</span>` : ''}</span>
+            <span class="font-mono text-[11px] text-slate-500 whitespace-nowrap">${fmtTime(t.time)}</span>
+          </div>`).join('')}
+        </div>
+      </details>` : '';
+    const log = stripAnsi(r.log).trim();
+    $('detail').innerHTML = `
+      <div class="flex flex-wrap items-center gap-2"><span class="font-mono text-sm text-white break-all">${esc(r.name)}</span>${badge(r.status)}</div>
+      <dl class="text-xs space-y-1">${meta.map(([k, v]) => `<div class="flex gap-3"><dt class="w-20 shrink-0 text-slate-500">${k}</dt><dd class="font-mono text-slate-300 break-all">${esc(v)}</dd></div>`).join('')}</dl>
+      ${tcHtml}
+      <pre id="logPre" class="bg-black/60 border border-slate-800 rounded-lg p-4 font-mono text-xs leading-relaxed text-slate-300 max-h-96 overflow-auto scroll-thin whitespace-pre-wrap break-words">${log ? esc(log) : '<span class="text-slate-600">No log captured. Twister usually stores logs only for failed or errored suites; add --inline-logs to capture more.</span>'}</pre>`;
+    copy.classList.toggle('hidden', !log);
+  }
+
+  function renderSubtitle() {
+    const run = state.runs[state.cur];
+    $('subtitle').textContent = run ? runLabel(run) + (state.runs.length > 1 ? ` – run ${state.cur + 1} of ${state.runs.length}` : '') : 'No results loaded';
+  }
+
+  function renderAll() {
+    renderSubtitle(); renderCards(); renderPlatforms(); renderEnv(); renderTable(); renderDetail();
+  }
+  function renderFiltered() { renderCards(); renderPlatforms(); renderTable(); }
+
+  // ---------- meta-analysis ----------
+  let metaToken = 0;
+  let metaCache = null;
+
+  async function openMeta() {
+    const token = ++metaToken;
+    const runs = state.runs;
+    const pending = runs.map((r, i) => i).filter((i) => !runs[i].rows && !runs[i].error);
+    for (let k = 0; k < pending.length; k++) {
+      $('metaStatus').textContent = `Loading run ${k + 1} of ${pending.length}…`;
+      try { await loadRun(pending[k]); } catch (e) { runs[pending[k]].error = e.message; }
+      if (token !== metaToken || state.view !== 'meta') return;
+    }
+    renderMeta();
+  }
+
+  const rateOf = (c) => { const ex = c.passed + c.failed + c.error; return ex ? c.passed / ex : null; };
+  const worse = (a, b) => (a == null ? b : (ST[b].rank < ST[a].rank ? b : a));
+
+  function buildHistory(loaded) {
+    const map = new Map();
+    loaded.forEach(({ r }, ri) => {
+      r.rows.forEach((row) => row.units.forEach((u) => {
+        const id = u.id || row.name;
+        const key = row.platform + '\u0000' + id;
+        let h = map.get(key);
+        if (!h) { h = { id, platform: row.platform, hist: new Array(loaded.length).fill(null) }; map.set(key, h); }
+        h.hist[ri] = worse(h.hist[ri], u.status);
+      }));
+    });
+    const list = Array.from(map.values());
+    list.forEach((h) => {
+      const ex = h.hist.filter((s) => s === 'passed' || isBad(s));
+      h.pass = ex.filter((s) => s === 'passed').length;
+      h.bad = ex.length - h.pass;
+      h.exec = ex.length;
+      h.flips = 0;
+      for (let k = 1; k < ex.length; k++) if ((ex[k] === 'passed') !== (ex[k - 1] === 'passed')) h.flips++;
+      h.flaky = h.pass > 0 && h.bad > 0;
+      h.always = h.bad > 0 && h.pass === 0;
+    });
+    return list;
+  }
+
+  function renderMeta() {
+    const loaded = state.runs.map((r, i) => ({ r, i })).filter((x) => x.r.rows);
+    const broken = state.runs.filter((r) => r.error);
+    $('metaStatus').textContent = `${loaded.length} run${loaded.length === 1 ? '' : 's'} compared, oldest to newest by date` +
+      (broken.length ? `. Could not load: ${broken.map((r) => r.name).join(', ')}` : '');
+    if (loaded.length < 2) { metaCache = null; return; }
+
+    const stats = loaded.map(({ r, i }) => {
+      const c = counts(r.rows);
+      return { r, i, c, tests: KEYS.reduce((a, k) => a + c[k], 0), rate: rateOf(c), time: r.rows.reduce((a, x) => a + x.time, 0) };
+    });
+    const hist = buildHistory(loaded);
+    metaCache = { loaded, hist };
+
+    // trend chart
+    if (typeof Chart !== 'undefined') {
+      if (trendChart) trendChart.destroy();
+      const ds = KEYS.filter((k) => stats.some((s) => s.c[k] > 0)).map((k) => ({
+        type: 'bar', label: ST[k].label, data: stats.map((s) => s.c[k]), backgroundColor: ST[k].hex, stack: 't', yAxisID: 'y', order: 2
+      }));
+      ds.push({ type: 'line', label: 'Pass rate %', data: stats.map((s) => (s.rate == null ? null : +(s.rate * 100).toFixed(1))), borderColor: '#e2e8f0', backgroundColor: '#e2e8f0', yAxisID: 'y1', tension: 0.25, pointRadius: 3, order: 1 });
+      trendChart = new Chart($('trendChart'), {
+        type: 'bar',
+        data: { labels: stats.map((s) => s.r.name), datasets: ds },
+        options: {
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { labels: { boxWidth: 12 } } },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'tests' } },
+            y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: 'pass rate %' } }
+          }
+        }
+      });
+    }
+
+    // runs table
+    $('runRows').innerHTML = stats.map((s, k) => {
+      const prev = k > 0 ? stats[k - 1] : null;
+      let delta = '';
+      if (prev && s.rate != null && prev.rate != null) {
+        const d = (s.rate - prev.rate) * 100;
+        if (Math.abs(d) >= 0.05) delta = ` <span class="${d > 0 ? 'text-emerald-400' : 'text-rose-400'} text-[11px]">${d > 0 ? '+' : ''}${d.toFixed(1)}</span>`;
+      }
+      const failing = s.c.failed + s.c.error;
+      return `<tr data-run="${s.i}" class="cursor-pointer border-t border-slate-800/70 hover:bg-slate-900 ${s.i === state.cur ? 'bg-indigo-500/10' : ''}">
+        <td class="px-3 py-2 font-mono text-xs text-slate-200 break-all">${esc(s.r.name)}</td>
+        <td class="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">${esc(fmtDate(s.r.t))}</td>
+        <td class="px-3 py-2 text-right font-mono text-xs text-slate-300">${s.tests}</td>
+        <td class="px-3 py-2 text-right font-mono text-xs text-slate-300 whitespace-nowrap">${s.rate == null ? '–' : (s.rate * 100).toFixed(1) + '%'}${delta}</td>
+        <td class="px-3 py-2 text-right font-mono text-xs ${failing ? 'text-rose-400' : 'text-slate-500'}">${failing}</td>
+        <td class="px-3 py-2 text-right font-mono text-xs text-slate-400 whitespace-nowrap">${fmtTime(s.time)}</td>
+        <td class="px-3 py-2 font-mono text-xs text-slate-400">${esc((s.r.env && s.r.env.zephyr_version) || '–')}</td>
+      </tr>`;
+    }).join('');
+
+    renderChanges();
+    renderHistory();
+  }
+
+  function testItem(h, tag) {
+    return `<li class="px-4 py-1.5 border-t border-slate-800/70 first:border-t-0">
+      <div class="font-mono text-xs text-slate-200 break-all">${esc(h.id)}${tag ? ` <span class="text-[10px] text-slate-500">${tag}</span>` : ''}</div>
+      <div class="font-mono text-[11px] text-slate-500 break-all">${esc(h.platform)}</div></li>`;
+  }
+
+  function renderChanges() {
+    if (!metaCache) return;
+    const { loaded, hist } = metaCache;
+    const pos = loaded.findIndex((x) => x.i === state.cur);
+    const cap = 100;
+    if (pos <= 0) {
+      $('changesTitle').textContent = 'Changes since the previous run';
+      $('changesSummary').textContent = pos < 0 ? 'Pick a run in the header dropdown to compare it with the one before it.' : 'The selected run is the oldest one, so there is nothing before it to compare against. Pick a newer run in the header dropdown.';
+      $('newFail').innerHTML = ''; $('fixed').innerHTML = '';
+      $('newFailCount').textContent = ''; $('fixedCount').textContent = '';
+      return;
+    }
+    const cur = loaded[pos].r, prev = loaded[pos - 1].r;
+    const newFail = [], fixed = [];
+    let added = 0, removed = 0;
+    hist.forEach((h) => {
+      const a = h.hist[pos - 1], b = h.hist[pos];
+      if (isBad(b) && !isBad(a)) newFail.push(h);
+      else if (b === 'passed' && isBad(a)) fixed.push(h);
+      if (a == null && b != null) added++;
+      if (a != null && b == null) removed++;
+    });
+    $('changesTitle').textContent = `Changes in ${cur.name} compared with ${prev.name}`;
+    $('changesSummary').textContent = `${added} test${added === 1 ? '' : 's'} added, ${removed} removed. Choose another run in the header dropdown to compare a different pair.`;
+    const render = (arr, tagFn) => arr.slice(0, cap).map((h) => testItem(h, tagFn(h))).join('') +
+      (arr.length > cap ? `<li class="px-4 py-2 text-xs text-slate-500 border-t border-slate-800/70">${arr.length - cap} more not shown</li>` : '') ||
+      '<li class="px-4 py-3 text-sm text-slate-500">None</li>';
+    $('newFail').innerHTML = render(newFail, (h) => (h.hist[pos - 1] == null ? 'new test' : ''));
+    $('fixed').innerHTML = render(fixed, () => '');
+    $('newFailCount').textContent = `(${newFail.length})`;
+    $('fixedCount').textContent = `(${fixed.length})`;
+  }
+
+  function renderHistory() {
+    if (!metaCache) return;
+    const { loaded, hist } = metaCache;
+    const mode = $('histFilter').value;
+    const q = $('histSearch').value.toLowerCase();
+    let list = hist.filter((h) => (mode === 'flaky' ? h.flaky : mode === 'always' ? h.always : h.bad > 0));
+    if (q) list = list.filter((h) => (h.id + ' ' + h.platform).toLowerCase().includes(q));
+    list.sort((a, b) => (b.flips - a.flips) || (b.bad / (b.exec || 1) - a.bad / (a.exec || 1)) || (b.bad - a.bad) || a.id.localeCompare(b.id));
+    const cap = 150;
+    $('histCount').textContent = `(${list.length}${list.length > cap ? ', showing ' + cap : ''})`;
+    $('histNone').classList.toggle('hidden', list.length > 0);
+    $('histRows').innerHTML = list.slice(0, cap).map((h) => {
+      const strip = h.hist.map((s, k) => `<span title="${esc(loaded[k].r.name)}: ${s ? ST[s].label : 'not present'}" class="inline-block w-2.5 h-4 rounded-sm" style="background:${s ? ST[s].hex : '#1e293b'}"></span>`).join('');
+      return `<tr class="border-t border-slate-800/70">
+        <td class="px-3 py-2 font-mono text-xs text-slate-200 break-all">${esc(h.id)}</td>
+        <td class="px-3 py-2 font-mono text-[11px] text-slate-400 break-all">${esc(h.platform)}</td>
+        <td class="px-3 py-2"><span class="flex gap-0.5">${strip}</span></td>
+        <td class="px-3 py-2 text-right font-mono text-xs text-slate-300 whitespace-nowrap">${h.bad}/${h.exec}</td>
+        <td class="px-3 py-2 text-right font-mono text-xs text-slate-300">${h.flips}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ---------- events ----------
+  $('openBtn').onclick = () => $('fileInput').click();
+  $('fileInput').onchange = (e) => { loadFiles(e.target.files); e.target.value = ''; };
+  $('moreBtn').onclick = () => { state.limit += PAGE; renderTable(); };
+  $('clearFilters').onclick = () => { state.status = null; state.platform = null; state.q = ''; $('search').value = ''; state.limit = PAGE; renderFiltered(); };
+  $('search').oninput = (e) => { state.q = e.target.value; state.limit = PAGE; renderFiltered(); };
+
+  $('runSelect').onchange = async (e) => {
+    const i = Number(e.target.value);
+    if (state.view === 'meta') {
+      try { await loadRun(i); state.cur = i; renderSubtitle(); renderMeta(); } catch (err) { showError(err.message); }
+    } else {
+      selectRun(i);
+    }
+  };
+  $('viewTabs').onclick = (e) => {
+    const b = e.target.closest('[data-view]'); if (!b) return;
+    if (b.dataset.view === 'run') selectRun(state.cur); else setView('meta');
+  };
+  $('runRows').onclick = (e) => {
+    const tr = e.target.closest('tr[data-run]'); if (!tr) return;
+    selectRun(Number(tr.dataset.run));
+  };
+  $('histFilter').onchange = renderHistory;
+  $('histSearch').oninput = renderHistory;
+
+  $('cards').onclick = (e) => {
+    const b = e.target.closest('[data-status]'); if (!b) return;
+    state.status = state.status === b.dataset.status ? null : b.dataset.status;
+    state.limit = PAGE; renderFiltered();
+  };
+  $('platforms').onclick = (e) => {
+    const b = e.target.closest('[data-platform]'); if (!b) return;
+    state.platform = state.platform === b.dataset.platform ? null : b.dataset.platform;
+    state.limit = PAGE; renderFiltered();
+  };
+  $('rows').onclick = (e) => {
+    const tr = e.target.closest('tr[data-i]'); if (!tr) return;
+    state.selected = Number(tr.dataset.i);
+    renderTable(); renderDetail();
+  };
+  document.querySelector('#dashboard thead').onclick = (e) => {
+    const th = e.target.closest('th[data-sort]'); if (!th) return;
+    const k = th.dataset.sort;
+    state.sort = state.sort.key === k ? { key: k, dir: -state.sort.dir } : { key: k, dir: 1 };
+    renderTable();
+  };
+  $('copyLog').onclick = async () => {
+    const pre = $('logPre'); if (!pre) return;
+    try { await navigator.clipboard.writeText(pre.textContent); $('copyLog').textContent = 'Copied'; }
+    catch (_) { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('copyLog').textContent = 'Selected, press Ctrl+C'; }
+    setTimeout(() => ($('copyLog').textContent = 'Copy log'), 1500);
+  };
+
+  $('csvBtn').onclick = () => {
+    const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const head = ['run', 'suite', 'platform', 'status', 'reason', 'execution_time_s', 'testcases', 'passed_testcases'];
+    const run = state.runs[state.cur] ? state.runs[state.cur].name : '';
+    const lines = [head.join(',')].concat(visibleRows().map((r) =>
+      [run, r.name, r.platform, r.status, r.reason, r.time, r.tcs.length, r.tcs.filter((t) => t.status === 'passed').length].map(q).join(',')));
+    const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'twister-results.csv'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // drag & drop anywhere
+  let dragDepth = 0;
+  const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $('dropOverlay').classList.remove('hidden'); });
+  window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('dropOverlay').classList.add('hidden'); });
+  window.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); dragDepth = 0; $('dropOverlay').classList.add('hidden');
+    loadFiles(e.dataTransfer.files);
+  });
+
+  // ---------- boot ----------
+  initCharts();
+
+  (async function autoLoad() {
+    try {
+      if (window.TWISTER_REPORT) {
+        await setRuns([makeRun(window.TWISTER_REPORT, window.TWISTER_SOURCE || 'embedded report', 0)]);
+        return;
+      }
+      if (!/^https?:$/.test(location.protocol)) return;
+
+      const src = new URLSearchParams(location.search).get('src');
+      if (src) {
+        const res = await fetch(src, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Could not load ' + src + ' (HTTP ' + res.status + ')');
+        await setRuns([makeRun(await res.json(), src, 0)]);
+        return;
+      }
+
+      // serve.sh exposes every twister-out / twister-out.N here
+      try {
+        const res = await fetch('api/runs', { cache: 'no-store' });
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length) {
+            await setRuns(list.map((r) => ({ name: r.name, t: r.mtime || 0, url: r.url, rows: undefined, env: {}, error: null })));
+            return;
+          }
+          return; // server reachable, but no reports yet: show the empty state
+        }
+      } catch (_) { /* not our server, fall through */ }
+
+      // plain static server fallback
+      for (const url of ['twister.json', 'twister-out/twister.json']) {
+        try {
+          const res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) continue;
+          await setRuns([makeRun(await res.json(), url, 0)]);
+          return;
+        } catch (_) { /* try next */ }
+      }
+    } catch (e) { showError(e.message); }
+  })();
+})();
+</script>
+</body>
+</html>
