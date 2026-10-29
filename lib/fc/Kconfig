@@ -1,0 +1,5 @@
+config FC_LIB
+	bool "Snowboard flight logic library"
+	help
+	  Arming state machine, filters, PID and mixer (lib/fc).
+	  Pure C with no Zephyr dependencies.

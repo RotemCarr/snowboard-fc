@@ -73,6 +73,50 @@ With a Raspberry Pi Debug Probe on the SWD connector (J4), use `west flash -r pr
 
 The board definition in `boards/snowboard/` describes Snowboard Rev 3 itself, following `hardware/docs/pinmap.md`: the ICM-42688 IMU on SPI0, the CRSF receiver on UART0 (J3), the battery, current and RSSI ADC channels, the status LED, buzzer and RGB LED, and the aux UART (PIO2) and I2C pads. The console is on USB (CDC ACM). DShot, the CRSF receiver node and flash partitions are still TODO in `snowboard.dtsi`; they are added with their drivers.
 
+## Testing
+
+Unit tests live in `tests/` and run on Zephyr's `native_sim` board, built with the host GCC, so no Zephyr SDK or hardware is needed. The `Dockerfile` provides the environment for this.
+
+### Build the image
+
+From the workspace root:
+
+```sh
+docker build -t snowboard-sim \
+  --build-arg ZEPHYR_REF=v4.4.2 \
+  --build-arg UID=$(id -u) --build-arg GID=$(id -g) \
+  snowboard-fc
+```
+
+`ZEPHYR_REF` selects which Zephyr revision's Python requirements are installed and should match the revision in `west.yml`. `UID` and `GID` make files written to the mounted workspace belong to you.
+
+### Run the tests
+
+Start a container from the workspace root, which is mounted at `/workspace`. The named `snowboard-ccache` volume keeps the compiler cache between runs:
+
+```sh
+docker run --rm -it \
+  -v "$PWD":/workspace \
+  -v snowboard-ccache:/home/dev/.ccache \
+  snowboard-sim
+```
+
+Inside the container, run every test suite with Twister:
+
+```sh
+west twister -T snowboard-fc/tests -p native_sim/native/64 --inline-logs
+```
+
+Twister finds each suite by its `testcase.yaml`, builds it, runs it and reports the results. To run one scenario, select it by the name in its `testcase.yaml`:
+
+```sh
+west twister -T snowboard-fc/tests -p native_sim/native/64 -s lib.fc.arming
+```
+
+Results are written to `twister-out/` in the workspace root; earlier runs are kept as `twister-out.1`, `twister-out.2` and so on. `twister-out/twister.json` holds the full report, and each suite's build directory, including its `handler.log`, is under `twister-out/`.
+
+To browse the results, run `tools/twister-dashboard/serve.sh` on the host from the workspace root. It opens a local dashboard of every `twister-out*` run.
+
 ## Hardware
 
 Open `hardware/snowboard_fc.kicad_pro` in KiCad 7 or newer. `hardware/README.md` covers the board, its RP2350 core (copied from Raspberry Pi's Minimal design), ordering, and planned changes for the next revision.
