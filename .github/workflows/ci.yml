@@ -56,14 +56,18 @@ jobs:
             -o "$GITHUB_WORKSPACE/reports/erc.rpt" \
             snowboard_fc.kicad_sch
 
+      # No --exit-code-violations here: KiCad counts the benign parity items for
+      # no-connect pads, so the verdict comes from check_drc.py instead.
       - name: DRC (with schematic parity)
         working-directory: hardware
         run: |
           mkdir -p "$GITHUB_WORKSPACE/reports"
           kicad-cli pcb drc \
-            --severity-all --schematic-parity --exit-code-violations \
+            --severity-all --schematic-parity \
             -o "$GITHUB_WORKSPACE/reports/drc.rpt" \
             snowboard_fc.kicad_pcb
+          python3 "$GITHUB_WORKSPACE/.github/scripts/check_drc.py" \
+            "$GITHUB_WORKSPACE/reports/drc.rpt"
 
       - name: Upload reports
         if: always()
