@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # DRC/ERC results can shift between KiCad versions, so this is pinned.
+  # Bump deliberately, not by accident.
+  KICAD_IMAGE: kicad/kicad:9.0
+  BOARD: snowboard/rp2350a/m33
+
+jobs:
+  hardware:
+    name: Hardware (pin map, ERC, DRC)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # gen_pinmap.py shells out to `kicad-cli`, so put a wrapper on PATH that
+      # runs it in the pinned KiCad container. The workspace is mounted at the
+      # same path inside the container so relative and absolute paths agree.
+      - name: Install kicad-cli wrapper
+        run: |
+          docker pull "$KICAD_IMAGE"
+          sudo tee /usr/local/bin/kicad-cli >/dev/null <<EOF
+          #!/bin/sh
+          exec docker run --rm --user $(id -u):$(id -g) -e HOME=/tmp \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -v /tmp:/tmp \
+            -w "\$PWD" "$KICAD_IMAGE" kicad-cli "\$@"
+          EOF
+          sudo chmod +x /usr/local/bin/kicad-cli
+          kicad-cli version
+
+      - name: Pin map matches schematic and is up to date
+        working-directory: hardware
+        run: |
+          python3 tools/gen_pinmap.py
+          git diff --exit-code -- docs/pinmap.md
+
+      - name: ERC
+        working-directory: hardware
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/reports"
+          kicad-cli sch erc \
+            --severity-error --exit-code-violations \
+            -o "$GITHUB_WORKSPACE/reports/erc.rpt" \
+            snowboard_fc.kicad_sch
+
+      # No --exit-code-violations here: KiCad counts the benign parity items for
+      # no-connect pads, so the verdict comes from check_drc.py instead.
+      - name: DRC (with schematic parity)
+        working-directory: hardware
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/reports"
+          kicad-cli pcb drc \
+            --severity-all --schematic-parity \
+            -o "$GITHUB_WORKSPACE/reports/drc.rpt" \
+            snowboard_fc.kicad_pcb
+          python3 "$GITHUB_WORKSPACE/.github/scripts/check_drc.py" \
+            "$GITHUB_WORKSPACE/reports/drc.rpt"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kicad-reports
+          path: reports/
+          if-no-files-found: ignore
+
+      # Rev 3 is "exactly what was sent to JLCPCB". Later revisions get their
+      # own directory, so nothing under fab/rev3 should ever change.
+      - name: Rev 3 fab outputs are frozen
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          changed="$(git diff --name-only "$BASE_SHA" HEAD -- hardware/fab/rev3)"
+          if [ -n "$changed" ]; then
+            echo "::error::hardware/fab/rev3 is frozen, but this PR changes:"
+            echo "$changed"
+            exit 1
+          fi
+
+  firmware:
+    name: Firmware (build, unit tests)
+    runs-on: ubuntu-24.04
+    steps:
+      # west.yml declares `self: path: snowboard-fc`, so the repo must be
+      # checked out into a directory with exactly that name.
+      - uses: actions/checkout@v4
+        with:
+          path: workspace/snowboard-fc
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build device-tree-compiler git wget xz-utils file make gcc
+          pip install west
+
+      # Restore only the fetched projects, not .west/. `west init -l` below
+      # recreates .west and `west update` then reuses the cached clones.
+      - name: Cache Zephyr and modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            workspace/zephyr
+            workspace/modules
+          key: west-${{ runner.os }}-${{ hashFiles('workspace/snowboard-fc/west.yml') }}
+
+      - name: West workspace
+        working-directory: workspace
+        run: |
+          west init -l snowboard-fc
+          west update --narrow -o=--depth=1
+          west zephyr-export
+          pip install -r zephyr/scripts/requirements.txt
+
+      # Installs the SDK that the checked-out Zephyr asks for, so a manifest
+      # bump to a new Zephyr does not need a CI change.
+      - name: Zephyr SDK (arm toolchain)
+        working-directory: workspace
+        run: west sdk install --toolchains arm-zephyr-eabi -b "$HOME"
+
+      - name: Build apps/fc
+        working-directory: workspace
+        run: |
+          west build -b "$BOARD" snowboard-fc/apps/fc -d build/fc
+          west manifest --freeze -o build/fc/west-frozen.yml
+
+      # lib/fc is plain C, tested with ztest on native_sim from tests/lib/fc.
+      # The step stays off until the first testcase.yaml exists there.
+      - name: Unit tests (native_sim)
+        if: hashFiles('workspace/snowboard-fc/tests/lib/fc/**/testcase.yaml') != ''
+        working-directory: workspace
+        run: >
+          west twister -p native_sim/native/64
+          -T snowboard-fc/tests/lib/fc
+          -O build/twister --inline-logs
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: fc-firmware
+          path: |
+            workspace/build/fc/zephyr/zephyr.elf
+            workspace/build/fc/zephyr/zephyr.uf2
+            workspace/build/fc/zephyr/zephyr.bin
+            workspace/build/fc/west-frozen.yml
+          if-no-files-found: warn
