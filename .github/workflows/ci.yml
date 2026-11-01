@@ -143,14 +143,14 @@ jobs:
           west build -b "$BOARD" snowboard-fc/apps/fc -d build/fc
           west manifest --freeze -o build/fc/west-frozen.yml
 
-      # lib/fc is plain C tested with ztest on native_sim. This step turns
-      # itself on as soon as the first testcase.yaml lands under lib/fc.
+      # lib/fc is plain C, tested with ztest on native_sim from tests/lib/fc.
+      # The step stays off until the first testcase.yaml exists there.
       - name: Unit tests (native_sim)
-        if: hashFiles('workspace/snowboard-fc/lib/fc/**/testcase.yaml') != ''
+        if: hashFiles('workspace/snowboard-fc/tests/lib/fc/**/testcase.yaml') != ''
         working-directory: workspace
         run: >
           west twister -p native_sim/native/64
-          -T snowboard-fc/lib/fc
+          -T snowboard-fc/tests/lib/fc
           -O build/twister --inline-logs
 
       - name: Upload firmware
