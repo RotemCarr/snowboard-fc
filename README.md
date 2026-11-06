@@ -36,11 +36,11 @@ RFC 0002 adds `apps/bringup/` (self-test firmware), `drivers/` (DShot, CRSF), `d
 This repository is the manifest of a west workspace. Zephyr and its modules are fetched next to it and are not part of the repository.
 
 ```sh
-west init -m <this-repo-url> snowboard-workspace
+west init -m https://github.com/RotemCarr/snowboard-fc.git snowboard-workspace
 cd snowboard-workspace
 west update
-west zephyr-export
 pip install -r zephyr/scripts/requirements.txt
+west zephyr-export
 ```
 
 The result:
@@ -83,7 +83,7 @@ From the workspace root:
 
 ```sh
 docker build -t snowboard-sim \
-  --build-arg ZEPHYR_REF=v4.4.2 \
+  --build-arg ZEPHYR_REF=v4.5.0 \
   --build-arg UID=$(id -u) --build-arg GID=$(id -g) \
   snowboard-fc
 ```
