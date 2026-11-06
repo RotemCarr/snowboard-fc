@@ -17,7 +17,7 @@ env:
   # DRC/ERC results can shift between KiCad versions, so this is pinned.
   # Bump deliberately, not by accident.
   KICAD_IMAGE: kicad/kicad:9.0
-  BOARD: snowboard/rp2350a/m33
+  BOARD: snowboard/rp2350a/m33_0
 
 jobs:
   hardware:
@@ -128,8 +128,8 @@ jobs:
         run: |
           west init -l snowboard-fc
           west update --narrow -o=--depth=1
-          west zephyr-export
           pip install -r zephyr/scripts/requirements.txt
+          west zephyr-export
 
       # Installs the SDK that the checked-out Zephyr asks for, so a manifest
       # bump to a new Zephyr does not need a CI change.
