@@ -4,6 +4,7 @@ zephyr_library_named(fc)
 zephyr_library_sources(
   src/arming.c
   src/crsf.c
+  src/axis_stats.c
 )
 
 # Public headers: callers use #include <fc/arming.h>
