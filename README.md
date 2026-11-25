@@ -6,7 +6,7 @@ Snowboard is a custom RP2350A flight controller, built to replace the flight con
 | --- | --- |
 | Hardware | Rev 3, ordered from JLCPCB (fabrication and full assembly) |
 | Firmware | Snowboard Rev 3 board definition (see below) |
-| Zephyr | v4.4.2 |
+| Zephyr | v4.5.0 |
 | Hardware spec | [RFC 0001 / SNB-HW-001](docs/rfcs/0001-flight-controller-hardware.md) |
 | Firmware architecture | [RFC 0002](docs/rfcs/0002-firmware-architecture.md) |
 
@@ -16,7 +16,7 @@ Snowboard is a custom RP2350A flight controller, built to replace the flight con
 snowboard-fc/
 ├── west.yml                # west manifest: pins Zephyr and its modules
 ├── zephyr/module.yml       # registers this repo as a Zephyr module
-├── boards/snowboard/       # Zephyr board definition (snowboard/rp2350a/m33)
+├── boards/snowboard/       # Zephyr board definition (snowboard/rp2350a/m33_0)
 ├── app/                    # firmware application (becomes apps/fc, RFC 0002 §2.2)
 ├── hardware/               # KiCad project, fab outputs, pin map, schematic PDF
 └── docs/rfcs/              # design records
@@ -58,7 +58,7 @@ snowboard-workspace/
 From the workspace root:
 
 ```sh
-west build -b snowboard/rp2350a/m33 snowboard-fc/apps/fc
+west build -b snowboard/rp2350a/m33_0 snowboard-fc/apps/fc
 ```
 
 ### Flash
